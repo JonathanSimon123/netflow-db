@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
-import os
 import logging
-import mysql.connector as mysql
+import mysql.connector
 
 
 class DB(object):
@@ -21,8 +20,7 @@ class DB(object):
     def connect(self):
         if self.conn is None or not self.conn.is_connected():
             try:
-                self.conn = mysql.connect(**self.config)
-                return conn
+                self.conn = mysql.connector.connect(**self.config)
             except Exception as e:
                 logging.error(e)
 
@@ -94,6 +92,6 @@ class DB(object):
 
 if __name__ == "__main__":
     db = DB("root", "caicai12", "115.238.145.73", "3366", "netflow")
-    conn = db.connect()
+    db.connect()
     query = "show tables"
     print(db.select(query))
