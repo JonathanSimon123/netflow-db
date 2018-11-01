@@ -175,6 +175,26 @@ def conn_thread(connection, add, que):
             connection.sendall(data + "\r\n")
 
 
+class EmitDataToTcpPort(object):
+
+    @staticmethod
+    def do(receive_udp_port, emit_tcp_port):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.bind(('', int(receive_udp_port)))
+
+        q = Queue.Queue()
+        thread.start_new_thread(accept, (100, q))
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        address = ('', int(emit_tcp_port))
+        server.bind(address)
+        server.listen(4)
+
+        while True:
+            connection, address = server.accept()
+            thread.start_new_thread(conn_thread, (connection, address, q))
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: python netflow_v10.py <netflow_port> <port>", file=sys.stderr)
