@@ -37,6 +37,8 @@ NETFLOW_REC_V5 = {
     17: 'src_mask',
     18: 'dst_mask',
 }
+
+
 NETFLOW_REC_V9 = {
     1: 'in_bytes',
     2: 'in_pkts',
