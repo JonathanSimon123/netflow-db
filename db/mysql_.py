@@ -91,7 +91,7 @@ class DB(object):
 
 
 if __name__ == "__main__":
-    db = DB("root", "caicai12", "115.238.145.73", "3366", "netflow")
+    db = DB("root", "password", "localhost", "3366", "netflow")
     db.connect()
     query = "show tables"
     print(db.select(query))
