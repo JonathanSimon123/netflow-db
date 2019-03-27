@@ -1,13 +1,13 @@
 # netflow-db
 Save netflow messages to a database for analysis.
 
-Supports gathering Netflow records in v5 or v9 format. At the moment, only MySQL is supported as a back end database.
+Supports gathering Netflow records in V10 (custom template) format. At the moment, only MySQL is supported as a back end database.
 
 This enables users to perform pivot-table operations on the data in Excel.
 
 Required:
-* Python 3.5
-* ipaddress module
+* Python 2.7
+* Spark 2.3
 * Oracle MySQL Connector
 
 <pre>

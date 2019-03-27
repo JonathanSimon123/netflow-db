@@ -24,15 +24,13 @@ class Spark(object):
         self.lines = self.ssc.socketTextStream(host, port)
 
     def seconds_handle(self):
+        words = self.lines.map(lambda line: line.split(" "))
+        # 每秒聚合
+        pairs = words.map(lambda word: ("{} {} {}".format(word[0], word[1], word[2]), int(word[3])))
 
-    # words = self.lines.map(lambda line: line.split(" "))
-
-    # 每秒聚合
-    # pairs = words.map(lambda word: ("{} {} {}".format(word[0], word[1], word[2]), int(word[3])))
-
-    # 每秒聚合
-    # wordCounts = pairs.reduceByKey(lambda x, y: x + y)
-    # wordCounts.pprint()
+        # 每秒聚合
+        word_counts = pairs.reduceByKey(lambda x, y: x + y)
+        word_counts.pprint()
 
     def seconds_30_handle(self):
         # 每30秒聚合
@@ -79,7 +77,9 @@ if __name__ == "__main__":
         ap.exit(-1, "error: port must be  1-65535")
 
     et = nv.EmitDataToTcpPort
-    et.do(args.receive_port, args.tcp_port) # 处理netflow数据然后开启TCP服务器，发生数据
+    # 处理netflow数据然后开启TCP服务器，发生数据
+    et.do(args.receive_port, args.tcp_port)
 
     spark = Spark(sys.argv[0], sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]))
-    spark.seconds_30_handle()
+    # spark.seconds_30_handle()
+    spark.seconds_handle()
