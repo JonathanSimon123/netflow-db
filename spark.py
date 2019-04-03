@@ -6,9 +6,10 @@ from pyspark.streaming import StreamingContext
 import os
 import argparse
 from netflow import netflow_v10 as nv
+import thread
+from db import mysql_
 
 
-#
 # 1.通过创建输入DStream来定义输入源
 # 2.通过对DStream应用转换操作和输出操作来定义流计算
 # 3.streamingContext.start() 来开始接收数据和处理流程
@@ -16,9 +17,23 @@ from netflow import netflow_v10 as nv
 # 5.可以通过streamingContext.stop()来手动结束流计算进程
 
 
+def save_data(iter):
+    mysql_client = mysql_.DB("root", "passwrod", "localhost", "3366", "netflow")
+    mysql_client.connect()
+    for record in iter:
+        date_, time_, ip = record[0].split(" ")
+        sql = "insert into netflow  (ip, seconds_sum, time,date)values('%s', %d, '%s', '%s')" % (
+            ip, record[1], time_, date_)
+        print(sql)
+        try:
+            mysql_client.insert(sql)
+        except Exception as e:
+            raise e
+
+
 class Spark(object):
     def __init__(self, name, inter_time, dire, host, port):
-        self.sc = SparkContext(appName=name)
+        self.sc = SparkContext(master="local[2]", appName=name)
         self.ssc = StreamingContext(self.sc, inter_time)
         self.ssc.checkpoint(dire)
         self.lines = self.ssc.socketTextStream(host, port)
@@ -27,10 +42,18 @@ class Spark(object):
         words = self.lines.map(lambda line: line.split(" "))
         # 每秒聚合
         pairs = words.map(lambda word: ("{} {} {}".format(word[0], word[1], word[2]), int(word[3])))
+        # 每秒聚合, 过度窗口2s,滑动窗口1
+        windowed_word_counts = pairs.reduceByKeyAndWindow(lambda x, y: x + y, 1, 1)
 
-        # 每秒聚合
-        word_counts = pairs.reduceByKey(lambda x, y: x + y)
-        word_counts.pprint()
+        # 数据存入mysql
+        windowed_word_counts.foreachRDD(
+            lambda rdd: rdd.foreachPartition(
+                lambda iter: save_data(iter)
+            )
+        )
+
+        self.ssc.start()
+        self.ssc.awaitTermination()
 
     def seconds_30_handle(self):
         # 每30秒聚合
@@ -63,23 +86,26 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Copy Netflow data to a MySQL database.")
     ap.add_argument('--daemonize', '-d', action='store_true', help="run in background")
     ap.add_argument('--pidfile', type=str, default=default_pidfile, help="location of pid file")
-    ap.add_argument('--dbuser', '-U', default="netflow", help="database user")
+    ap.add_argument('--dbuser', '-U', default="root", help="database user")
     ap.add_argument('--dbpassword', '-P', help="database password")
-    ap.add_argument('--dbhost', '-H', default="127.0.0.1", help="database host")
+    ap.add_argument('--dbhost', '-H', default="localhost", help="database host")
     ap.add_argument('--dbname', '-D', default="netflow", help="database name")
-    ap.add_argument('receive_port', type=int, help="Netflow UDP listener port")
-    ap.add_argument('tcp_port', type=int, help="emit netflow handled data to tcp port")
+    ap.add_argument('--receive_port', default="30001", type=int, help="Netflow UDP listener port")
+    ap.add_argument('--tcp_port', '-p', default="50003", type=int, help="emit netflow handled data to tcp port")
     ap.add_argument('--quiet', '-q', action='store_true',
                     help="Suppress console messages (only warnings and errors will be shown")
 
     args = ap.parse_args()
-    if args.port < 1 or args.port > 65535:
+    if args.receive_port < 1 or args.receive_port > 65535:
+        ap.exit(-1, "error: port must be  1-65535")
+
+    if args.receive_port < 1 or args.receive_port > 65535:
         ap.exit(-1, "error: port must be  1-65535")
 
     et = nv.EmitDataToTcpPort
     # 处理netflow数据然后开启TCP服务器，发生数据
-    et.do(args.receive_port, args.tcp_port)
+    thread.start_new_thread(et.do, (args.receive_port, args.tcp_port))
 
-    spark = Spark(sys.argv[0], sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]))
-    # spark.seconds_30_handle()
+    # spark = Spark(sys.argv[0], sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]))
+    spark = Spark(args.dbname, 1, "/home/checkpoint", args.dbhost, args.tcp_port)
     spark.seconds_handle()
