@@ -10,6 +10,13 @@ Required:
 * Spark 2.3
 * Oracle MySQL Connector
 
+
+# spark的3种运行模式
+- local：本地单进程模式，用于本地开发测试Spark代码
+- standalone：分布式集群模式，Master-Worker架构，Master负责调度，Worker负责具体Task的执行
+- on yarn/mesos：运行在yarn/mesos等资源管理框架之上，yarn/mesos提供资源管理，spark提供计算调度，并可与其他计算框架(如MapReduce/MPI/Storm)共同运行在同一个集群之上 (使用cloudera搭建的集群就是这种情况)
+
+
 <pre>
 usage: netflow.py [-h] [--daemonize] [--pidfile PIDFILE] [--dbuser DBUSER]
                   [--dbpassword DBPASSWORD] [--dbhost DBHOST]

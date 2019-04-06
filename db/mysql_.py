@@ -4,6 +4,18 @@ import logging
 import mysql.connector
 
 
+def singleton(cls):
+    _instance = {}
+
+    def _singleton(*args, **kargs):
+        if cls not in _instance:
+            _instance[cls] = cls(*args, **kargs)
+        return _instance[cls]
+
+    return _singleton
+
+
+@singleton
 class DB(object):
     def __init__(self, db_user, db_password, db_host, db_port, db_name):
         self.conn = None
@@ -90,6 +102,7 @@ class DB(object):
 
 
 if __name__ == "__main__":
+    # test
     mysql_client = DB("root", "password", "localhost", "3366", "netflow")
     mysql_client.connect()
     mysql_client.create_tables()

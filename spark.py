@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import sys
-from pyspark import SparkContext
+from pyspark import SparkContext, SparkConf
 from pyspark.streaming import StreamingContext
 import os
 import argparse
@@ -32,11 +32,14 @@ def save_data(iter):
 
 
 class Spark(object):
-    def __init__(self, name, inter_time, dire, host, port):
-        self.sc = SparkContext(master="local[2]", appName=name)
-        self.ssc = StreamingContext(self.sc, inter_time)
+    def __init__(self, inter_time, dire, port):
+        conf = SparkConf()
+        conf.setMaster("spark://localhost:7077")
+        conf.setAppName("netflow application")
+        sc = SparkContext(conf=conf)
+        self.ssc = StreamingContext(sc, inter_time)
         self.ssc.checkpoint(dire)
-        self.lines = self.ssc.socketTextStream(host, port)
+        self.lines = self.ssc.socketTextStream("localhost", port)
 
     def seconds_handle(self):
         words = self.lines.map(lambda line: line.split(" "))
@@ -84,20 +87,10 @@ if __name__ == "__main__":
         default_pidfile = None
 
     ap = argparse.ArgumentParser(description="Copy Netflow data to a MySQL database.")
-    ap.add_argument('--daemonize', '-d', action='store_true', help="run in background")
-    ap.add_argument('--pidfile', type=str, default=default_pidfile, help="location of pid file")
-    ap.add_argument('--dbuser', '-U', default="root", help="database user")
-    ap.add_argument('--dbpassword', '-P', help="database password")
-    ap.add_argument('--dbhost', '-H', default="localhost", help="database host")
-    ap.add_argument('--dbname', '-D', default="netflow", help="database name")
-    ap.add_argument('--receive_port', default="30001", type=int, help="Netflow UDP listener port")
-    ap.add_argument('--tcp_port', '-p', default="50003", type=int, help="emit netflow handled data to tcp port")
-    ap.add_argument('--quiet', '-q', action='store_true',
-                    help="Suppress console messages (only warnings and errors will be shown")
+    ap.add_argument('--receive_port', default="30001", help="Netflow UDP listener port")
+    ap.add_argument('--port', '-p', default="50003", help="emit netflow handled data to tcp port")
 
     args = ap.parse_args()
-    if args.receive_port < 1 or args.receive_port > 65535:
-        ap.exit(-1, "error: port must be  1-65535")
 
     if args.receive_port < 1 or args.receive_port > 65535:
         ap.exit(-1, "error: port must be  1-65535")
@@ -106,6 +99,5 @@ if __name__ == "__main__":
     # 处理netflow数据然后开启TCP服务器，发生数据
     thread.start_new_thread(et.do, (args.receive_port, args.tcp_port))
 
-    # spark = Spark(sys.argv[0], sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4]))
-    spark = Spark(args.dbname, 1, "/home/checkpoint", args.dbhost, args.tcp_port)
+    spark = Spark(1, "/home/checkpoint", args.tcp_port)
     spark.seconds_handle()
