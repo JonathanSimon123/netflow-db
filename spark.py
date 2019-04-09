@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-import sys
 from pyspark import SparkContext, SparkConf
 from pyspark.streaming import StreamingContext
 import os
 import argparse
-from netflow import netflow_v10 as nv
 import thread
 from db import mysql_
+from read_data import send_data
 
 
 # 1.通过创建输入DStream来定义输入源
@@ -18,7 +16,7 @@ from db import mysql_
 
 
 def save_data(iter):
-    mysql_client = mysql_.DB("root", "passwrod", "localhost", "3366", "netflow")
+    mysql_client = mysql_.DB("root", "passwd", "localhost", "3306", "netflow")
     mysql_client.connect()
     for record in iter:
         date_, time_, ip = record[0].split(" ")
@@ -33,15 +31,27 @@ def save_data(iter):
 
 class Spark(object):
     def __init__(self, inter_time, dire, port):
-        conf = SparkConf()
-        conf.setMaster("spark://localhost:7077")
-        conf.setAppName("netflow application")
-        sc = SparkContext(conf=conf)
-        self.ssc = StreamingContext(sc, inter_time)
+        # conf = SparkConf()
+        # conf.setMaster("spark://localhost:7077")
+        # conf.setAppName("netflow application")
+        # sc = SparkContext(conf=conf)
+        # self.ssc = StreamingContext(sc, inter_time)
+        # self.ssc.checkpoint(dire)
+        # self.lines = self.ssc.socketTextStream("localhost", port)
+        self.sc = SparkContext(master="local[2]", appName="aggregation traffic")
+        self.ssc = StreamingContext(self.sc, inter_time)
         self.ssc.checkpoint(dire)
         self.lines = self.ssc.socketTextStream("localhost", port)
 
-    def seconds_handle(self):
+    @staticmethod
+    def data_to_30s(n_data):
+        date_, time_, ip, traffic = n_data.split(" ")
+        h, m, s = time_.split(":")
+        s = 0 if s < 30 else 30
+        time_ = "{}:{}:{}".format(h, m, s)
+        return "{} {} {}".format(date_, time_, ip), traffic
+
+    def seconds_handle_from_iface(self):
         words = self.lines.map(lambda line: line.split(" "))
         # 每秒聚合
         pairs = words.map(lambda word: ("{} {} {}".format(word[0], word[1], word[2]), int(word[3])))
@@ -58,25 +68,6 @@ class Spark(object):
         self.ssc.start()
         self.ssc.awaitTermination()
 
-    def seconds_30_handle(self):
-        # 每30秒聚合
-        pairs_30 = self.lines.map(self.data_to_30s)
-
-        # 每30秒聚合, 过度窗口60s, 滑动窗口40s
-        windowed_word_counts = pairs_30.reduceByKeyAndWindow(lambda x, y: x + y, 40, 40)
-        windowed_word_counts.foreachRDD()  # 为什么是按batchDuration 来打印
-
-        self.ssc.start()
-        self.ssc.awaitTermination()
-
-    @staticmethod
-    def data_to_30s(n_data):
-        date_, time_, ip, traffic = n_data.split(" ")
-        h, m, s = time_.split(":")
-        s = 0 if s < 30 else 30
-        time_ = "{}:{}:{}".format(h, m, s)
-        return "{} {} {}".format(date_, time_, ip), traffic
-
 
 if __name__ == "__main__":
     if os.name == 'nt':
@@ -86,18 +77,15 @@ if __name__ == "__main__":
     else:
         default_pidfile = None
 
-    ap = argparse.ArgumentParser(description="Copy Netflow data to a MySQL database.")
-    ap.add_argument('--receive_port', default="30001", help="Netflow UDP listener port")
-    ap.add_argument('--port', '-p', default="50003", help="emit netflow handled data to tcp port")
+    ap = argparse.ArgumentParser(description="read net card data to a MySQL database.")
+    ap.add_argument('--port', '-p', default="50003", type=int, help="emit netflow handled data to tcp port")
 
     args = ap.parse_args()
 
-    if args.receive_port < 1 or args.receive_port > 65535:
-        ap.exit(-1, "error: port must be  1-65535")
+    if args.port < 30001 or args.port > 65535:
+        ap.exit(-1, "error: port must be 30001-65535")
 
-    et = nv.EmitDataToTcpPort
-    # 处理netflow数据然后开启TCP服务器，发生数据
-    thread.start_new_thread(et.do, (args.receive_port, args.tcp_port))
+    thread.start_new(send_data, (args.port,))
 
-    spark = Spark(1, "/home/checkpoint", args.tcp_port)
-    spark.seconds_handle()
+    spark = Spark(1, "/home/checkpoint", args.port)
+    spark.seconds_handle_from_iface()

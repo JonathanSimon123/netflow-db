@@ -1,0 +1,7 @@
+# python -m pip install mysql-connector
+# pip install mysql-python
+# yum install python-dev
+# yum install scapy
+mysql-connector=2.2.9
+pypcap=1.2.2
+mysql-python
